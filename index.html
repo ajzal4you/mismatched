@@ -1,872 +1,1217 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlightSync — Passenger Data Reconciliation</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    font-family: var(--font-sans);
-  }
+:root {
+–bg: #0a0b0e;
+–surface: #111318;
+–surface2: #1a1d26;
+–border: #2a2d3a;
+–accent: #e8ff47;
+–accent2: #47c8ff;
+–accent3: #ff6b47;
+–text: #f0f0f0;
+–muted: #6b7280;
+–match: #22c55e;
+–mismatch: #ef4444;
+–warn: #f59e0b;
+}
 
-  .wrap {
-    padding: 1rem 0;
-  }
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘DM Mono’, monospace;
+min-height: 100vh;
+overflow-x: hidden;
+}
 
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 1.5rem;
-  }
+/* Animated grid background */
+body::before {
+content: ‘’;
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(232,255,71,0.03) 1px, transparent 1px),
+linear-gradient(90deg, rgba(232,255,71,0.03) 1px, transparent 1px);
+background-size: 40px 40px;
+pointer-events: none;
+z-index: 0;
+}
 
-  .header-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-background-info);
-    border-radius: var(--border-radius-md);
-  }
+/* Glow orbs */
+.orb {
+position: fixed;
+border-radius: 50%;
+filter: blur(120px);
+pointer-events: none;
+z-index: 0;
+}
+.orb-1 { width: 500px; height: 500px; background: rgba(232,255,71,0.06); top: -200px; left: -100px; }
+.orb-2 { width: 400px; height: 400px; background: rgba(71,200,255,0.05); bottom: -150px; right: -100px; }
 
-  .header-icon svg {
-    width: 18px;
-    height: 18px;
-  }
+header {
+position: relative;
+z-index: 10;
+padding: 2rem 3rem;
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
 
-  h2 {
-    font-size: 18px;
-    font-weight: 500;
-    color: var(--color-text-primary);
-  }
+.logo {
+display: flex;
+align-items: center;
+gap: 0.75rem;
+}
 
-  .subtitle {
-    font-size: 13px;
-    color: var(--color-text-secondary);
-    margin-top: 2px;
-  }
+.logo-icon {
+width: 36px;
+height: 36px;
+background: var(–accent);
+border-radius: 6px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 18px;
+}
 
-  .upload-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 1.5rem;
-  }
+.logo-text {
+font-family: ‘Syne’, sans-serif;
+font-weight: 800;
+font-size: 1.4rem;
+letter-spacing: -0.03em;
+color: var(–text);
+}
 
-  .upload-zone {
-    border: 1.5px dashed var(--color-border-secondary);
-    border-radius: var(--border-radius-lg);
-    padding: 1.5rem 1rem;
-    text-align: center;
-    cursor: pointer;
-    transition: background 0.15s;
-    position: relative;
-    background: var(--color-background-secondary);
-  }
+.logo-text span { color: var(–accent); }
 
-  .upload-zone:hover {
-    background: var(--color-background-tertiary);
-  }
+.badge {
+font-size: 0.65rem;
+padding: 0.25rem 0.75rem;
+border: 1px solid var(–border);
+border-radius: 100px;
+color: var(–muted);
+letter-spacing: 0.1em;
+text-transform: uppercase;
+}
 
-  .upload-zone.has-file {
-    border-style: solid;
-    border-color: var(--color-border-success);
-    background: var(--color-background-success);
-  }
+main {
+position: relative;
+z-index: 10;
+max-width: 1400px;
+margin: 0 auto;
+padding: 3rem 3rem;
+}
 
-  .upload-zone.dragover {
-    background: var(--color-background-info);
-    border-color: var(--color-border-info);
-  }
+.hero {
+text-align: center;
+margin-bottom: 4rem;
+}
 
-  .upload-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
-  }
+.hero-label {
+font-size: 0.7rem;
+letter-spacing: 0.2em;
+text-transform: uppercase;
+color: var(–accent);
+margin-bottom: 1rem;
+}
 
-  .upload-label span {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-  }
+.hero h1 {
+font-family: ‘Syne’, sans-serif;
+font-weight: 800;
+font-size: clamp(2.5rem, 5vw, 4.5rem);
+line-height: 1;
+letter-spacing: -0.04em;
+margin-bottom: 1rem;
+}
 
-  .badge-a {
-    background: #E6F1FB;
-    color: #185FA5;
-  }
+.hero h1 em {
+font-family: ‘Instrument Serif’, serif;
+font-style: italic;
+color: var(–accent);
+}
 
-  .badge-b {
-    background: #EAF3DE;
-    color: #3B6D11;
-  }
+.hero p {
+color: var(–muted);
+font-size: 0.9rem;
+max-width: 500px;
+margin: 0 auto;
+line-height: 1.7;
+}
 
-  .upload-hint {
-    font-size: 12px;
-    color: var(--color-text-tertiary);
-    margin-top: 4px;
-  }
+/* Upload zone */
+.upload-grid {
+display: grid;
+grid-template-columns: 1fr auto 1fr;
+gap: 1.5rem;
+align-items: start;
+margin-bottom: 2rem;
+}
 
-  .file-name {
-    font-size: 12px;
-    color: var(--color-text-success);
-    font-weight: 500;
-    margin-top: 6px;
-    word-break: break-all;
-  }
+.vs-divider {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 0.5rem;
+padding-top: 2rem;
+}
 
-  .upload-icon {
-    width: 28px;
-    height: 28px;
-    margin: 0 auto 8px;
-    opacity: 0.4;
-  }
+.vs-line { width: 1px; height: 60px; background: var(–border); }
+.vs-badge {
+width: 36px;
+height: 36px;
+border: 1px solid var(–border);
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 0.65rem;
+color: var(–muted);
+letter-spacing: 0.05em;
+}
 
-  input[type=file] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-  }
+.upload-panel {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 16px;
+overflow: hidden;
+transition: border-color 0.3s;
+}
 
-  .btn-run {
-    display: block;
-    width: 100%;
-    padding: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: var(--border-radius-md);
-    border: 0.5px solid var(--color-border-secondary);
-    background: var(--color-background-primary);
-    color: var(--color-text-primary);
-    transition: background 0.1s;
-  }
+.upload-panel:hover { border-color: rgba(232,255,71,0.3); }
+.upload-panel.has-data { border-color: rgba(232,255,71,0.5); }
+.upload-panel.drag-over { border-color: var(–accent); background: rgba(232,255,71,0.03); }
 
-  .btn-run:hover:not(:disabled) {
-    background: var(--color-background-secondary);
-  }
+.panel-header {
+padding: 1.25rem 1.5rem;
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
 
-  .btn-run:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+.panel-label {
+font-family: ‘Syne’, sans-serif;
+font-weight: 700;
+font-size: 0.85rem;
+letter-spacing: 0.05em;
+text-transform: uppercase;
+}
 
-  .btn-run.active {
-    background: #185FA5;
-    color: #fff;
-    border-color: #185FA5;
-  }
+.dataset-tag {
+font-size: 0.65rem;
+padding: 0.2rem 0.6rem;
+border-radius: 4px;
+font-weight: 500;
+letter-spacing: 0.05em;
+}
 
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin: 1.25rem 0;
-  }
+.tag-a { background: rgba(232,255,71,0.15); color: var(–accent); }
+.tag-b { background: rgba(71,200,255,0.15); color: var(–accent2); }
 
-  .stat-card {
-    background: var(--color-background-secondary);
-    border-radius: var(--border-radius-md);
-    padding: 0.75rem 1rem;
-  }
+.drop-zone {
+padding: 2.5rem 2rem;
+text-align: center;
+cursor: pointer;
+transition: background 0.2s;
+}
 
-  .stat-label {
-    font-size: 11px;
-    color: var(--color-text-secondary);
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
+.drop-zone:hover { background: rgba(255,255,255,0.02); }
 
-  .stat-val {
-    font-size: 22px;
-    font-weight: 500;
-    color: var(--color-text-primary);
-  }
+.drop-icon {
+font-size: 2.5rem;
+margin-bottom: 1rem;
+display: block;
+}
 
-  .stat-val.danger {
-    color: var(--color-text-danger);
-  }
+.drop-title {
+font-family: ‘Syne’, sans-serif;
+font-weight: 600;
+font-size: 1rem;
+margin-bottom: 0.4rem;
+}
 
-  .stat-val.success {
-    color: var(--color-text-success);
-  }
+.drop-sub {
+font-size: 0.72rem;
+color: var(–muted);
+line-height: 1.6;
+}
 
-  .stat-val.warning {
-    color: var(--color-text-warning);
-  }
+.drop-formats {
+display: flex;
+flex-wrap: wrap;
+gap: 0.4rem;
+justify-content: center;
+margin-top: 1rem;
+}
 
-  .result-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-  }
+.fmt-chip {
+font-size: 0.6rem;
+padding: 0.15rem 0.5rem;
+border: 1px solid var(–border);
+border-radius: 4px;
+color: var(–muted);
+letter-spacing: 0.05em;
+}
 
-  .result-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--color-text-primary);
-  }
+input[type=“file”] { display: none; }
 
-  .btn-dl {
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 500;
-    border: 0.5px solid var(--color-border-info);
-    border-radius: var(--border-radius-md);
-    background: var(--color-background-info);
-    color: var(--color-text-info);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
+.file-info {
+padding: 1rem 1.5rem;
+background: rgba(232,255,71,0.05);
+border-top: 1px solid var(–border);
+font-size: 0.75rem;
+display: none;
+align-items: center;
+gap: 0.75rem;
+}
 
-  .btn-dl:hover {
-    opacity: 0.85;
-  }
+.file-info.visible { display: flex; }
+.file-dot { width: 8px; height: 8px; border-radius: 50%; background: var(–accent); flex-shrink: 0; }
+.file-name { color: var(–accent); font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-rows { color: var(–muted); }
+.file-clear { background: none; border: none; color: var(–mismatch); cursor: pointer; font-size: 1rem; padding: 0; line-height: 1; }
 
-  .tabs {
-    display: flex;
-    gap: 2px;
-    border-bottom: 0.5px solid var(--color-border-tertiary);
-    margin-bottom: 1rem;
-  }
+/* Analyze button */
+.action-bar {
+text-align: center;
+margin: 2rem 0 3rem;
+}
 
-  .tab {
-    padding: 6px 14px;
-    font-size: 13px;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    color: var(--color-text-secondary);
-    margin-bottom: -1px;
-  }
+.btn-analyze {
+font-family: ‘Syne’, sans-serif;
+font-weight: 700;
+font-size: 1rem;
+letter-spacing: 0.05em;
+padding: 1rem 3rem;
+background: var(–accent);
+color: #0a0b0e;
+border: none;
+border-radius: 100px;
+cursor: pointer;
+transition: all 0.2s;
+position: relative;
+overflow: hidden;
+}
 
-  .tab.active {
-    color: var(--color-text-info);
-    border-bottom-color: #185FA5;
-    font-weight: 500;
-  }
+.btn-analyze::before {
+content: ‘’;
+position: absolute;
+inset: 0;
+background: white;
+opacity: 0;
+transition: opacity 0.2s;
+}
 
-  .tbl-wrap {
-    overflow-x: auto;
-    border: 0.5px solid var(--color-border-tertiary);
-    border-radius: var(--border-radius-lg);
-  }
+.btn-analyze:hover::before { opacity: 0.1; }
+.btn-analyze:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(232,255,71,0.3); }
+.btn-analyze:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-    min-width: 700px;
-  }
+.btn-analyze.loading::after {
+content: ‘’;
+display: inline-block;
+width: 14px; height: 14px;
+border: 2px solid rgba(0,0,0,0.3);
+border-top-color: #0a0b0e;
+border-radius: 50%;
+animation: spin 0.7s linear infinite;
+margin-left: 0.75rem;
+vertical-align: middle;
+}
 
-  th {
-    background: var(--color-background-secondary);
-    padding: 8px 10px;
-    text-align: left;
-    font-weight: 500;
-    font-size: 11px;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-bottom: 0.5px solid var(--color-border-tertiary);
-    white-space: nowrap;
-  }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  td {
-    padding: 8px 10px;
-    border-bottom: 0.5px solid var(--color-border-tertiary);
-    color: var(--color-text-primary);
-    white-space: nowrap;
-  }
+/* Stats bar */
+.stats-bar {
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+gap: 1px;
+background: var(–border);
+border: 1px solid var(–border);
+border-radius: 12px;
+overflow: hidden;
+margin-bottom: 2rem;
+}
 
-  tr:last-child td {
-    border-bottom: none;
-  }
+.stat-card {
+background: var(–surface);
+padding: 1.5rem;
+text-align: center;
+}
 
-  tr:hover td {
-    background: var(--color-background-secondary);
-  }
+.stat-value {
+font-family: ‘Syne’, sans-serif;
+font-weight: 800;
+font-size: 2.5rem;
+line-height: 1;
+margin-bottom: 0.4rem;
+}
 
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 500;
-  }
+.stat-label {
+font-size: 0.65rem;
+color: var(–muted);
+letter-spacing: 0.1em;
+text-transform: uppercase;
+}
 
-  .badge-missing-a {
-    background: #FAEEDA;
-    color: #854F0B;
-  }
+.stat-total .stat-value { color: var(–text); }
+.stat-match .stat-value { color: var(–match); }
+.stat-mismatch .stat-value { color: var(–mismatch); }
+.stat-only .stat-value { color: var(–warn); }
 
-  .badge-missing-b {
-    background: #EAF3DE;
-    color: #3B6D11;
-  }
+/* Results */
+.results-section { display: none; }
+.results-section.visible { display: block; }
 
-  .badge-mismatch {
-    background: #FCEBEB;
-    color: #A32D2D;
-  }
+.section-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 1.5rem;
+}
 
-  .badge-source-a {
-    background: #E6F1FB;
-    color: #185FA5;
-  }
+.section-title {
+font-family: ‘Syne’, sans-serif;
+font-weight: 700;
+font-size: 1.1rem;
+display: flex;
+align-items: center;
+gap: 0.75rem;
+}
 
-  .badge-source-b {
-    background: #EAF3DE;
-    color: #3B6D11;
-  }
+.count-badge {
+font-size: 0.7rem;
+padding: 0.2rem 0.6rem;
+border-radius: 4px;
+font-weight: 500;
+}
 
-  .progress {
-    height: 3px;
-    background: var(--color-background-secondary);
-    border-radius: 2px;
-    margin: 0.75rem 0;
-    overflow: hidden;
-  }
+.badge-mismatch { background: rgba(239,68,68,0.2); color: var(–mismatch); }
+.badge-only-a { background: rgba(232,255,71,0.15); color: var(–accent); }
+.badge-only-b { background: rgba(71,200,255,0.15); color: var(–accent2); }
+.badge-match { background: rgba(34,197,94,0.15); color: var(–match); }
 
-  .progress-bar {
-    height: 100%;
-    background: #185FA5;
-    border-radius: 2px;
-    transition: width 0.3s;
-  }
+.btn-download {
+font-family: ‘Syne’, sans-serif;
+font-weight: 600;
+font-size: 0.8rem;
+padding: 0.6rem 1.25rem;
+background: transparent;
+border: 1px solid var(–accent);
+color: var(–accent);
+border-radius: 8px;
+cursor: pointer;
+transition: all 0.2s;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
 
-  .log-box {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--color-text-secondary);
-    background: var(--color-background-secondary);
-    border-radius: var(--border-radius-md);
-    padding: 0.75rem 1rem;
-    max-height: 80px;
-    overflow-y: auto;
-    margin: 0.5rem 0;
-    line-height: 1.6;
-  }
+.btn-download:hover { background: var(–accent); color: #0a0b0e; }
 
-  .empty-state {
-    text-align: center;
-    padding: 2rem 1rem;
-    color: var(--color-text-tertiary);
-    font-size: 13px;
-  }
+/* Table */
+.table-wrap {
+border: 1px solid var(–border);
+border-radius: 12px;
+overflow: hidden;
+overflow-x: auto;
+margin-bottom: 2.5rem;
+}
 
-  .field-diff {
-    background: #FCEBEB;
-    border-radius: 3px;
-    padding: 0 3px;
-    color: #A32D2D;
-  }
+table {
+width: 100%;
+border-collapse: collapse;
+font-size: 0.78rem;
+min-width: 700px;
+}
 
-  .filter-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 0.75rem;
-    flex-wrap: wrap;
-  }
+thead tr {
+background: var(–surface2);
+border-bottom: 1px solid var(–border);
+}
 
-  .filter-btn {
-    padding: 4px 12px;
-    font-size: 12px;
-    border: 0.5px solid var(--color-border-secondary);
-    border-radius: 20px;
-    background: transparent;
-    cursor: pointer;
-    color: var(--color-text-secondary);
-  }
+th {
+padding: 0.85rem 1rem;
+text-align: left;
+font-size: 0.65rem;
+letter-spacing: 0.1em;
+text-transform: uppercase;
+color: var(–muted);
+font-weight: 500;
+white-space: nowrap;
+}
 
-  .filter-btn.on {
-    background: var(--color-background-info);
-    color: var(--color-text-info);
-    border-color: var(--color-border-info);
-  }
+tbody tr {
+border-bottom: 1px solid rgba(42,45,58,0.5);
+transition: background 0.15s;
+}
 
-  .search-inp {
-    padding: 5px 10px;
-    font-size: 12px;
-    border: 0.5px solid var(--color-border-secondary);
-    border-radius: var(--border-radius-md);
-    flex: 1;
-    min-width: 140px;
-    background: var(--color-background-primary);
-    color: var(--color-text-primary);
-  }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+tbody tr:last-child { border-bottom: none; }
+
+td {
+padding: 0.85rem 1rem;
+color: var(–text);
+white-space: nowrap;
+}
+
+.diff-cell {
+position: relative;
+}
+
+.val-a {
+display: block;
+color: var(–accent);
+font-size: 0.72rem;
+}
+
+.val-b {
+display: block;
+color: var(–accent2);
+font-size: 0.72rem;
+}
+
+.val-label {
+font-size: 0.55rem;
+color: var(–muted);
+margin-right: 0.3rem;
+text-transform: uppercase;
+}
+
+.status-pill {
+display: inline-flex;
+align-items: center;
+gap: 0.3rem;
+padding: 0.25rem 0.65rem;
+border-radius: 100px;
+font-size: 0.65rem;
+font-weight: 500;
+text-transform: uppercase;
+letter-spacing: 0.05em;
+}
+
+.pill-mismatch { background: rgba(239,68,68,0.15); color: var(–mismatch); }
+.pill-only-a { background: rgba(232,255,71,0.1); color: var(–accent); }
+.pill-only-b { background: rgba(71,200,255,0.1); color: var(–accent2); }
+
+.dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.dot-mismatch { background: var(–mismatch); }
+.dot-only-a { background: var(–accent); }
+.dot-only-b { background: var(–accent2); }
+
+.empty-state {
+padding: 3rem;
+text-align: center;
+color: var(–muted);
+font-size: 0.8rem;
+}
+
+.tab-nav {
+display: flex;
+gap: 0.5rem;
+margin-bottom: 1.5rem;
+border-bottom: 1px solid var(–border);
+padding-bottom: 0;
+}
+
+.tab-btn {
+font-family: ‘Syne’, sans-serif;
+font-size: 0.8rem;
+font-weight: 600;
+padding: 0.6rem 1.25rem;
+background: none;
+border: none;
+border-bottom: 2px solid transparent;
+color: var(–muted);
+cursor: pointer;
+transition: all 0.2s;
+margin-bottom: -1px;
+}
+
+.tab-btn.active { color: var(–text); border-bottom-color: var(–accent); }
+.tab-btn:hover:not(.active) { color: var(–text); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.field-diff-badge {
+font-size: 0.6rem;
+background: rgba(239,68,68,0.15);
+color: var(–mismatch);
+padding: 0.1rem 0.4rem;
+border-radius: 3px;
+margin-left: 0.4rem;
+}
+
+/* Error message */
+.error-banner {
+background: rgba(239,68,68,0.1);
+border: 1px solid rgba(239,68,68,0.3);
+border-radius: 8px;
+padding: 1rem 1.25rem;
+font-size: 0.8rem;
+color: var(–mismatch);
+margin-bottom: 1.5rem;
+display: none;
+}
+
+.error-banner.visible { display: block; }
+
+footer {
+position: relative;
+z-index: 10;
+text-align: center;
+padding: 2rem;
+color: var(–muted);
+font-size: 0.7rem;
+border-top: 1px solid var(–border);
+margin-top: 4rem;
+}
+
+@media (max-width: 768px) {
+header { padding: 1.25rem 1.5rem; }
+main { padding: 2rem 1.5rem; }
+.upload-grid { grid-template-columns: 1fr; }
+.vs-divider { flex-direction: row; padding-top: 0; }
+.vs-line { width: 60px; height: 1px; }
+.stats-bar { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
 
-<div class="wrap">
-  <h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Flight passenger
-    data reconciliation tool — upload Dataset A (Excel) and Dataset B (PDF) to find mismatches</h2>
+</head>
+<body>
 
-  <div class="header">
-    <div class="header-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="1.8">
-        <path
-          d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
-    </div>
-    <div>
-      <div style="font-size:18px;font-weight:500;color:var(--color-text-primary)">Passenger data reconciliation</div>
-      <div class="subtitle">Upload Dataset A (Excel) and Dataset B (PDF) — finds passengers missing in either file</div>
-    </div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">✈</div>
+    <div class="logo-text">Flight<span>Sync</span></div>
   </div>
+  <div class="badge">Passenger Reconciliation</div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="hero-label">▸ Data Mismatch Analyzer</div>
+    <h1>Find Every<br><em>Discrepancy</em></h1>
+    <p>Upload two passenger datasets and instantly surface every mismatch, missing record, and conflicting field.</p>
+  </div>
+
+  <!-- Upload Grid -->
 
   <div class="upload-grid">
-    <div class="upload-zone" id="zone-a" ondragover="ev(event,'a')" ondragleave="el('a')" ondrop="ed(event,'a')">
-      <input type="file" id="file-a" accept=".xlsx,.xls,.csv" onchange="onFile(event,'a')">
-      <div class="upload-label"><span class="badge-a">Dataset A</span></div>
-      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="12" y1="18" x2="12" y2="12" />
-        <line x1="9" y1="15" x2="15" y2="15" />
-      </svg>
-      <div style="font-size:13px;color:var(--color-text-secondary)">Excel / CSV</div>
-      <div class="upload-hint">.xlsx .xls .csv</div>
-      <div class="file-name" id="fname-a"></div>
+    <!-- Dataset A -->
+    <div class="upload-panel" id="panel-a">
+      <div class="panel-header">
+        <span class="panel-label">Dataset A</span>
+        <span class="dataset-tag tag-a">PRIMARY</span>
+      </div>
+      <div class="drop-zone" id="dropzone-a" onclick="document.getElementById('file-a').click()">
+        <span class="drop-icon">📂</span>
+        <div class="drop-title">Drop your file here</div>
+        <div class="drop-sub">or click to browse</div>
+        <div class="drop-formats">
+          <span class="fmt-chip">CSV</span>
+          <span class="fmt-chip">XML</span>
+          <span class="fmt-chip">TXT</span>
+          <span class="fmt-chip">JSON</span>
+          <span class="fmt-chip">PDF</span>
+          <span class="fmt-chip">DOCX</span>
+          <span class="fmt-chip">XLS</span>
+        </div>
+      </div>
+      <div class="file-info" id="file-info-a">
+        <div class="file-dot"></div>
+        <span class="file-name" id="file-name-a"></span>
+        <span class="file-rows" id="file-rows-a"></span>
+        <button class="file-clear" onclick="clearFile('a')" title="Remove">✕</button>
+      </div>
+      <input type="file" id="file-a" accept=".csv,.xml,.txt,.json,.pdf,.docx,.xlsx,.xls,.tsv" onchange="handleFile(event,'a')">
     </div>
-    <div class="upload-zone" id="zone-b" ondragover="ev(event,'b')" ondragleave="el('b')" ondrop="ed(event,'b')">
-      <input type="file" id="file-b" accept=".pdf" onchange="onFile(event,'b')">
-      <div class="upload-label"><span class="badge-b">Dataset B</span></div>
-      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="12" y1="18" x2="12" y2="12" />
-        <line x1="9" y1="15" x2="15" y2="15" />
-      </svg>
-      <div style="font-size:13px;color:var(--color-text-secondary)">PDF Document</div>
-      <div class="upload-hint">.pdf</div>
-      <div class="file-name" id="fname-b"></div>
+
+```
+<!-- VS -->
+<div class="vs-divider">
+  <div class="vs-line"></div>
+  <div class="vs-badge">VS</div>
+  <div class="vs-line"></div>
+</div>
+
+<!-- Dataset B -->
+<div class="upload-panel" id="panel-b">
+  <div class="panel-header">
+    <span class="panel-label">Dataset B</span>
+    <span class="dataset-tag tag-b">COMPARE</span>
+  </div>
+  <div class="drop-zone" id="dropzone-b" onclick="document.getElementById('file-b').click()">
+    <span class="drop-icon">📂</span>
+    <div class="drop-title">Drop your file here</div>
+    <div class="drop-sub">or click to browse</div>
+    <div class="drop-formats">
+      <span class="fmt-chip">CSV</span>
+      <span class="fmt-chip">XML</span>
+      <span class="fmt-chip">TXT</span>
+      <span class="fmt-chip">JSON</span>
+      <span class="fmt-chip">PDF</span>
+      <span class="fmt-chip">DOCX</span>
+      <span class="fmt-chip">XLS</span>
     </div>
   </div>
+  <div class="file-info" id="file-info-b">
+    <div class="file-dot" style="background:var(--accent2)"></div>
+    <span class="file-name" id="file-name-b"></span>
+    <span class="file-rows" id="file-rows-b"></span>
+    <button class="file-clear" onclick="clearFile('b')" title="Remove">✕</button>
+  </div>
+  <input type="file" id="file-b" accept=".csv,.xml,.txt,.json,.pdf,.docx,.xlsx,.xls,.tsv" onchange="handleFile(event,'b')">
+</div>
+```
 
-  <button class="btn-run" id="btn-run" disabled onclick="runAnalysis()">Upload both files to start analysis</button>
-
-  <div id="progress-wrap" style="display:none">
-    <div class="progress">
-      <div class="progress-bar" id="pbar" style="width:0%"></div>
-    </div>
-    <div class="log-box" id="log"></div>
   </div>
 
-  <div id="results" style="display:none">
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Total A</div>
-        <div class="stat-val" id="s-a">0</div>
+  <div class="error-banner" id="error-banner"></div>
+
+  <div class="action-bar">
+    <button class="btn-analyze" id="btn-analyze" onclick="runAnalysis()" disabled>
+      ▸ Run Analysis
+    </button>
+  </div>
+
+  <!-- Results -->
+
+  <div class="results-section" id="results">
+    <div class="stats-bar">
+      <div class="stat-card stat-total">
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Total Records</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Total B</div>
-        <div class="stat-val" id="s-b">0</div>
+      <div class="stat-card stat-mismatch">
+        <div class="stat-value" id="stat-mismatch">0</div>
+        <div class="stat-label">Mismatches</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Missing in A</div>
-        <div class="stat-val warning" id="s-ma">0</div>
+      <div class="stat-card stat-only">
+        <div class="stat-value" id="stat-only">0</div>
+        <div class="stat-label">Missing Records</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Missing in B</div>
-        <div class="stat-val warning" id="s-mb">0</div>
+      <div class="stat-card stat-match">
+        <div class="stat-value" id="stat-match">0</div>
+        <div class="stat-label">Exact Matches</div>
       </div>
     </div>
 
-    <div class="result-header">
-      <div class="result-title" id="res-title">Mismatch report</div>
-      <button class="btn-dl" onclick="downloadCSV()" id="btn-dl">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        Download CSV
-      </button>
-    </div>
+```
+<div class="section-header">
+  <div class="section-title">
+    Analysis Results
+    <span class="count-badge badge-mismatch" id="result-count-badge">0 issues</span>
+  </div>
+  <button class="btn-download" onclick="downloadCSV()">
+    ↓ Download Full Report
+  </button>
+</div>
 
-    <div class="tabs">
-      <div class="tab active" id="tab-all" onclick="switchTab('all')">All mismatches</div>
-      <div class="tab" id="tab-ma" onclick="switchTab('ma')">Missing in A</div>
-      <div class="tab" id="tab-mb" onclick="switchTab('mb')">Missing in B</div>
-    </div>
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('mismatches')">Mismatches</button>
+  <button class="tab-btn" onclick="switchTab('only-a')">Only in A</button>
+  <button class="tab-btn" onclick="switchTab('only-b')">Only in B</button>
+  <button class="tab-btn" onclick="switchTab('matches')">Matched</button>
+</div>
 
-    <div class="filter-row">
-      <input class="search-inp" type="text" placeholder="Search name, passport, flight..."
-        oninput="filterRows(this.value)" id="search-inp">
-      <button class="filter-btn on" id="fb-all" onclick="setFilter('all')">All</button>
-      <button class="filter-btn" id="fb-ma" onclick="setFilter('missing_a')">Missing in A</button>
-      <button class="filter-btn" id="fb-mb" onclick="setFilter('missing_b')">Missing in B</button>
-    </div>
-
-    <div class="tbl-wrap">
-      <table id="res-table">
-        <thead id="tbl-head"></thead>
-        <tbody id="tbl-body"></tbody>
-      </table>
-    </div>
+<div class="tab-content active" id="tab-mismatches">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Key</th>
+          <th>Surname</th>
+          <th>First Name</th>
+          <th>Flight No</th>
+          <th>Differences</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-mismatches"></tbody>
+    </table>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<div class="tab-content" id="tab-only-a">
+  <div class="table-wrap">
+    <table id="table-only-a">
+      <thead><tr id="thead-only-a-row"></tr></thead>
+      <tbody id="tbody-only-a"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-only-b">
+  <div class="table-wrap">
+    <table id="table-only-b">
+      <thead><tr id="thead-only-b-row"></tr></thead>
+      <tbody id="tbody-only-b"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-matches">
+  <div class="table-wrap">
+    <table id="table-matches">
+      <thead><tr id="thead-matches-row"></tr></thead>
+      <tbody id="tbody-matches"></tbody>
+    </table>
+  </div>
+</div>
+```
+
+  </div>
+</main>
+
+<footer>
+  FlightSync — Passenger Data Reconciliation Tool &nbsp;·&nbsp; All processing is done locally in your browser
+</footer>
+
 <script>
-  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  let fileA = null, fileB = null;
-  let dataA = [], dataB = [], mismatches = [];
-  let curTab = 'all', curFilter = 'all', curSearch = '';
+let dataA = [], dataB = [], headersA = [], headersB = [];
+let analysisResults = null;
 
-  function ev(e, z) { e.preventDefault(); document.getElementById('zone-' + z).classList.add('dragover'); }
-  function el(z) { document.getElementById('zone-' + z).classList.remove('dragover'); }
-  function ed(e, z) { e.preventDefault(); el(z); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0], z); }
+// ── Drag and drop ──────────────────────────────────────────────
+['a','b'].forEach(id => {
+  const dz = document.getElementById(`dropzone-${id}`);
+  dz.addEventListener('dragover', e => { e.preventDefault(); document.getElementById(`panel-${id}`).classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => document.getElementById(`panel-${id}`).classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    document.getElementById(`panel-${id}`).classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file, id);
+  });
+});
 
-  function onFile(e, z) { if (e.target.files[0]) handleFile(e.target.files[0], z); }
+// ── File handling ──────────────────────────────────────────────
+async function handleFile(e, id) {
+  const file = e.target.files[0];
+  if (file) await processFile(file, id);
+}
 
-  function handleFile(f, z) {
-    if (z === 'a') fileA = f; else fileB = f;
-    const zn = document.getElementById('zone-' + z);
-    zn.classList.remove('dragover');
-    zn.classList.add('has-file');
-    document.getElementById('fname-' + z).textContent = f.name;
-    checkReady();
-  }
+async function processFile(file, id) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  showError('');
 
-  function checkReady() {
-    const btn = document.getElementById('btn-run');
-    if (fileA && fileB) {
-      btn.disabled = false;
-      btn.textContent = 'Run mismatch analysis';
-      btn.classList.add('active');
-    }
-  }
+  try {
+    let rows = [], headers = [];
 
-  function log(msg) { const lb = document.getElementById('log'); lb.innerHTML += msg + '<br>'; lb.scrollTop = lb.scrollHeight; }
-  function setProgress(p) { document.getElementById('pbar').style.width = p + '%'; }
-
-  async function runAnalysis() {
-    document.getElementById('progress-wrap').style.display = 'block';
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('log').innerHTML = '';
-    document.getElementById('btn-run').disabled = true;
-
-    try {
-      log('→ Reading Dataset A (' + fileA.name + ')...');
-      setProgress(10);
-      dataA = await readExcel(fileA);
-      log('✓ Dataset A: ' + dataA.length + ' passengers loaded');
-      setProgress(40);
-
-      log('→ Reading Dataset B (' + fileB.name + ')...');
-      dataB = await readPDF(fileB);
-      log('✓ Dataset B: ' + dataB.length + ' passengers loaded');
-      setProgress(70);
-
-      log('→ Running reconciliation...');
-      mismatches = reconcile(dataA, dataB);
-      setProgress(100);
-      log('✓ Analysis complete — ' + mismatches.length + ' mismatches found');
-
-      renderResults();
-    } catch (err) {
-      log('✗ Error: ' + err.message);
-    }
-
-    document.getElementById('btn-run').disabled = false;
-  }
-
-  async function readExcel(file) {
-    return new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const wb = XLSX.read(e.target.result, { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-          res(normalizePassengers(rows, 'A'));
-        } catch (err) { rej(err); }
-      };
-      reader.onerror = () => rej(new Error('Failed to read Excel file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  async function readPDF(file) {
-    return new Promise(async (res, rej) => {
-      try {
-        const ab = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-        let allText = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const tc = await page.getTextContent();
-          const pageText = tc.items.map(it => it.str).join(' ');
-          allText += pageText + '\n';
-        }
-        res(parsePDFPassengers(allText, 'B'));
-      } catch (err) { rej(err); }
-    });
-  }
-
-  function normalizeKey(str) { return String(str || '').toLowerCase().replace(/[\s_\-\.]/g, ''); }
-
-  const KEY_MAP = {
-    surname: ['surname', 'lastname', 'last_name', 'familyname', 'family_name', 'lname'],
-    firstname: ['firstname', 'first_name', 'givenname', 'given_name', 'fname', 'forename'],
-    passport: ['passport', 'passportnumber', 'passport_number', 'passportno', 'docnumber', 'document'],
-    flight: ['flight', 'flightno', 'flight_no', 'flightnumber', 'flight_number'],
-    seat: ['seat', 'seatno', 'seat_no', 'seatnumber'],
-    nationality: ['nationality', 'nation', 'country', 'citizenship'],
-    dob: ['dob', 'dateofbirth', 'date_of_birth', 'birthdate', 'birth_date', 'birthday'],
-    gender: ['gender', 'sex'],
-    pnr: ['pnr', 'pnrcode', 'booking', 'bookingref', 'bookingreference', 'reference'],
-    class: ['class', 'cabinclass', 'cabin', 'travel_class', 'fare_class'],
-    checkin: ['checkin', 'check_in', 'checkinstatus', 'checkedin'],
-    baggage: ['baggage', 'bags', 'luggage', 'baggageweight', 'allowance']
-  };
-
-  function detectColumn(headers, keyList) {
-    for (const h of headers) {
-      const nk = normalizeKey(h);
-      for (const k of keyList) { if (nk === k || nk.includes(k)) return h; }
-    }
-    return null;
-  }
-
-  function normalizePassengers(rows, src) {
-    if (!rows.length) return [];
-    const headers = Object.keys(rows[0]);
-    const colMap = {};
-    for (const [field, keys] of Object.entries(KEY_MAP)) {
-      colMap[field] = detectColumn(headers, keys);
-    }
-    return rows.map((r, i) => {
-      const p = { _source: src, _row: i + 2 };
-      for (const [field, col] of Object.entries(colMap)) {
-        p[field] = col ? String(r[col] || '').trim() : '';
-      }
-      if (!p.surname && !p.firstname) {
-        const firstCol = headers[0];
-        const parts = String(r[firstCol] || '').split(/\s+/);
-        p.surname = parts[0] || '';
-        p.firstname = parts.slice(1).join(' ');
-      }
-      p._id = makeId(p);
-      return p;
-    }).filter(p => p._id.length > 2);
-  }
-
-  function makeId(p) { return (p.passport || p.pnr || (p.surname + p.firstname + p.dob)).toLowerCase().replace(/\s/g, ''); }
-
-  function parsePDFPassengers(text, src) {
-    const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-    const passengers = [];
-    let headers = null;
-    let headerIdx = -1;
-
-    for (let i = 0; i < lines.length; i++) {
-      const cols = splitLine(lines[i]);
-      if (cols.length >= 3 && isHeaderRow(cols)) {
-        headers = cols;
-        headerIdx = i;
-        break;
-      }
-    }
-
-    if (headers) {
-      const colMap = {};
-      for (const [field, keys] of Object.entries(KEY_MAP)) {
-        for (let ci = 0; ci < headers.length; ci++) {
-          if (keys.some(k => normalizeKey(headers[ci]) === k || normalizeKey(headers[ci]).includes(k))) {
-            colMap[field] = ci; break;
-          }
-        }
-      }
-      for (let i = headerIdx + 1; i < lines.length; i++) {
-        const cols = splitLine(lines[i]);
-        if (cols.length < 2) continue;
-        const p = { _source: src, _row: i };
-        for (const [field, ci] of Object.entries(colMap)) {
-          p[field] = cols[ci] || '';
-        }
-        if (!p.surname) { const nm = (cols[0] || '').split(/\s+/); p.surname = nm[0] || ''; p.firstname = nm.slice(1).join(' '); }
-        p._id = makeId(p);
-        if (p._id.length > 2) passengers.push(p);
-      }
-    }
-
-    if (!passengers.length) {
-      const ppRe = /([A-Z]{2,}\s+[A-Z][a-zA-Z\-]+)[\s,]+([A-Z0-9]{6,12})/g;
-      let m;
-      while ((m = ppRe.exec(text)) !== null) {
-        const nameParts = m[1].trim().split(/\s+/);
-        const p = { _source: src, _row: passengers.length + 1, surname: nameParts[0] || '', firstname: nameParts.slice(1).join(' '), passport: m[2] || '', flight: '', seat: '', nationality: '', dob: '', gender: '', pnr: '', class: '', checkin: '', baggage: '' };
-        p._id = makeId(p);
-        if (p._id.length > 2) passengers.push(p);
-      }
-    }
-
-    if (!passengers.length) {
-      for (const line of lines) {
-        const seg = line.split(/\s{2,}|\t/);
-        if (seg.length >= 2) {
-          const nm = seg[0].split(/\s+/);
-          const p = { _source: src, _row: passengers.length + 1, surname: nm[0] || '', firstname: nm.slice(1).join(' '), passport: seg[1] || '', flight: seg[2] || '', seat: seg[3] || '', nationality: seg[4] || '', dob: seg[5] || '', gender: seg[6] || '', pnr: seg[7] || '', class: seg[8] || '', checkin: '', baggage: '' };
-          p._id = makeId(p);
-          if (p._id.length > 2 && (p.surname.length > 1)) passengers.push(p);
-        }
-      }
-    }
-
-    return passengers;
-  }
-
-  function splitLine(line) { return line.split(/\s{2,}|\t|,/).map(s => s.trim()).filter(Boolean); }
-
-  function isHeaderRow(cols) {
-    const joined = cols.join(' ').toLowerCase();
-    return ['name', 'surname', 'passport', 'flight', 'seat', 'pnr', 'last', 'first', 'passenger'].some(k => joined.includes(k));
-  }
-
-  function reconcile(a, b) {
-    const mapA = new Map(a.map(p => [p._id, p]));
-    const mapB = new Map(b.map(p => [p._id, p]));
-    const results = [];
-    const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
-
-    for (const key of allKeys) {
-      const pa = mapA.get(key);
-      const pb = mapB.get(key);
-      if (pa && !pb) {
-        results.push({ ...pa, _type: 'missing_b', _note: 'Present in A — missing in B' });
-      } else if (!pa && pb) {
-        results.push({ ...pb, _type: 'missing_a', _note: 'Present in B — missing in A' });
-      }
-    }
-    return results;
-  }
-
-  const DISPLAY_FIELDS = ['surname', 'firstname', 'passport', 'flight', 'seat', 'pnr', 'nationality', 'dob', 'gender', 'class', 'checkin', 'baggage'];
-  const FIELD_LABELS = { surname: 'Surname', firstname: 'First name', passport: 'Passport no.', flight: 'Flight', seat: 'Seat', pnr: 'PNR', nationality: 'Nationality', dob: 'Date of birth', gender: 'Gender', class: 'Class', checkin: 'Check-in', baggage: 'Baggage' };
-
-  function renderResults() {
-    const missing_a = mismatches.filter(m => m._type === 'missing_a');
-    const missing_b = mismatches.filter(m => m._type === 'missing_b');
-
-    document.getElementById('s-a').textContent = dataA.length;
-    document.getElementById('s-b').textContent = dataB.length;
-    document.getElementById('s-ma').textContent = missing_a.length;
-    document.getElementById('s-mb').textContent = missing_b.length;
-
-    document.getElementById('results').style.display = 'block';
-
-    renderTable(mismatches);
-    updateTabCounts();
-  }
-
-  function updateTabCounts() {
-    const ma = mismatches.filter(m => m._type === 'missing_a').length;
-    const mb = mismatches.filter(m => m._type === 'missing_b').length;
-    document.getElementById('tab-all').textContent = 'All mismatches (' + mismatches.length + ')';
-    document.getElementById('tab-ma').textContent = 'Missing in A (' + ma + ')';
-    document.getElementById('tab-mb').textContent = 'Missing in B (' + mb + ')';
-  }
-
-  function renderTable(data) {
-    const head = document.getElementById('tbl-head');
-    const body = document.getElementById('tbl-body');
-
-    const filtered = applyFilters(data);
-
-    head.innerHTML = '<tr><th>Status</th><th>Source</th>' + DISPLAY_FIELDS.map(f => '<th>' + FIELD_LABELS[f] + '</th>').join('') + '<th>Note</th></tr>';
-
-    if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="' + (DISPLAY_FIELDS.length + 3) + '" class="empty-state">No records match current filters</td></tr>';
+    if (ext === 'csv' || ext === 'tsv') {
+      const text = await file.text();
+      const result = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false });
+      headers = result.meta.fields || [];
+      rows = result.data;
+    } else if (ext === 'json') {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      rows = Array.isArray(json) ? json : (json.passengers || json.records || json.data || Object.values(json)[0] || [json]);
+      headers = rows.length ? Object.keys(rows[0]) : [];
+    } else if (ext === 'xml') {
+      const text = await file.text();
+      const parsed = parseXML(text);
+      rows = parsed.rows; headers = parsed.headers;
+    } else if (ext === 'txt') {
+      const text = await file.text();
+      const parsed = parseTXT(text);
+      rows = parsed.rows; headers = parsed.headers;
+    } else if (ext === 'pdf') {
+      const arr = await file.arrayBuffer();
+      const parsed = await parsePDF(arr);
+      rows = parsed.rows; headers = parsed.headers;
+    } else if (ext === 'docx') {
+      showError('DOCX: Reading text content from Word documents. Complex tables may require manual column mapping.');
+      const arr = await file.arrayBuffer();
+      const parsed = await parseDOCX(arr);
+      rows = parsed.rows; headers = parsed.headers;
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const arr = await file.arrayBuffer();
+      const parsed = parseXLSX(arr);
+      rows = parsed.rows; headers = parsed.headers;
+    } else {
+      showError(`Unsupported format: .${ext}. Try CSV, JSON, XML, TXT, PDF, DOCX, or XLSX.`);
       return;
     }
 
-    body.innerHTML = filtered.map(row => {
-      const type = row._type;
-      const badge = type === 'missing_a' ? '<span class="badge badge-missing-a">Missing in A</span>' : '<span class="badge badge-missing-b">Missing in B</span>';
-      const srcBadge = type === 'missing_a' ? '<span class="badge badge-source-b">B</span>' : '<span class="badge badge-source-a">A</span>';
-      const cells = DISPLAY_FIELDS.map(f => '<td>' + (row[f] || '<span style="color:var(--color-text-tertiary)">—</span>') + '</td>').join('');
-      return '<tr>' +
-        '<td>' + badge + '</td>' +
-        '<td>' + srcBadge + '</td>' +
-        cells +
-        '<td style="color:var(--color-text-secondary);font-size:11px">' + row._note + '</td>' +
-        '</tr>';
-    }).join('');
+    if (!rows.length) { showError('No data rows found in file.'); return; }
 
-    document.getElementById('res-title').textContent = 'Showing ' + filtered.length + ' of ' + mismatches.length + ' mismatches';
+    if (id === 'a') { dataA = rows; headersA = headers; }
+    else { dataB = rows; headersB = headers; }
+
+    const panel = document.getElementById(`panel-${id}`);
+    panel.classList.add('has-data');
+    const info = document.getElementById(`file-info-${id}`);
+    info.classList.add('visible');
+    document.getElementById(`file-name-${id}`).textContent = file.name;
+    document.getElementById(`file-rows-${id}`).textContent = `${rows.length} rows`;
+
+    checkReady();
+  } catch(err) {
+    showError(`Error reading file: ${err.message}`);
+    console.error(err);
   }
+}
 
-  function applyFilters(data) {
-    let d = data;
-    if (curFilter === 'missing_a') d = d.filter(r => r._type === 'missing_a');
-    else if (curFilter === 'missing_b') d = d.filter(r => r._type === 'missing_b');
-    if (curSearch) {
-      const q = curSearch.toLowerCase();
-      d = d.filter(r => DISPLAY_FIELDS.some(f => String(r[f] || '').toLowerCase().includes(q)));
+function clearFile(id) {
+  if (id === 'a') { dataA = []; headersA = []; }
+  else { dataB = []; headersB = []; }
+  document.getElementById(`panel-${id}`).classList.remove('has-data');
+  document.getElementById(`file-info-${id}`).classList.remove('visible');
+  document.getElementById(`file-${id}`).value = '';
+  checkReady();
+  document.getElementById('results').classList.remove('visible');
+}
+
+function checkReady() {
+  document.getElementById('btn-analyze').disabled = !(dataA.length && dataB.length);
+}
+
+// ── Parsers ────────────────────────────────────────────────────
+function parseXML(text) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  const items = doc.querySelectorAll('passenger, record, row, item, entry, Passenger, Record');
+  if (!items.length) {
+    // Generic: take children of root's children
+    const root = doc.documentElement;
+    const children = [...root.children];
+    if (!children.length) return { rows: [], headers: [] };
+    const allKeys = new Set();
+    const rows = children.map(child => {
+      const obj = {};
+      [...child.children].forEach(el => { obj[el.tagName] = el.textContent.trim(); allKeys.add(el.tagName); });
+      // Also attributes
+      [...child.attributes].forEach(a => { obj[a.name] = a.value; allKeys.add(a.name); });
+      return obj;
+    });
+    return { rows, headers: [...allKeys] };
+  }
+  const allKeys = new Set();
+  const rows = [...items].map(item => {
+    const obj = {};
+    [...item.children].forEach(el => { obj[el.tagName] = el.textContent.trim(); allKeys.add(el.tagName); });
+    [...item.attributes].forEach(a => { obj[a.name] = a.value; allKeys.add(a.name); });
+    return obj;
+  });
+  return { rows, headers: [...allKeys] };
+}
+
+function parseTXT(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return { rows: [], headers: [] };
+  // Detect delimiter: tab, pipe, comma, semicolon
+  const delimiters = ['\t', '|', ',', ';', '  '];
+  let bestDel = ',';
+  let bestCount = 0;
+  delimiters.forEach(d => {
+    const count = (lines[0].split(d).length);
+    if (count > bestCount) { bestCount = count; bestDel = d; }
+  });
+  const result = Papa.parse(text, { header: true, delimiter: bestDel, skipEmptyLines: true });
+  return { rows: result.data, headers: result.meta.fields || [] };
+}
+
+async function parsePDF(arr) {
+  const pdf = await pdfjsLib.getDocument({ data: arr }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  // Try to parse as delimited text
+  return parseTXT(fullText);
+}
+
+async function parseDOCX(arr) {
+  // Basic DOCX text extraction via ZIP (no external lib needed for simple text)
+  try {
+    // Use a simple approach: look for text in the XML inside the docx
+    const uint8 = new Uint8Array(arr);
+    // Try to find word/document.xml content
+    let text = '';
+    // Convert to string to find XML patterns
+    const str = new TextDecoder('utf-8').decode(uint8);
+    const matches = str.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+    if (matches) {
+      text = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ');
     }
-    return d;
+    return parseTXT(text);
+  } catch(e) {
+    return { rows: [], headers: [] };
   }
+}
 
-  function switchTab(tab) {
-    curTab = tab;
-    ['all', 'ma', 'mb'].forEach(t => { document.getElementById('tab-' + t).classList.toggle('active', t === tab); });
-    if (tab === 'all') curFilter = 'all';
-    else if (tab === 'ma') curFilter = 'missing_a';
-    else if (tab === 'mb') curFilter = 'missing_b';
-    updateFilterBtns();
-    renderTable(mismatches);
+function parseXLSX(arr) {
+  // Simple XLSX CSV sheet extraction
+  try {
+    const uint8 = new Uint8Array(arr);
+    const str = new TextDecoder('utf-8').decode(uint8);
+    // Look for CSV-like patterns in shared strings
+    const sharedStrings = [];
+    const ssMatches = str.match(/<si><t[^>]*>([^<]*)<\/t><\/si>/g) || [];
+    ssMatches.forEach(m => sharedStrings.push(m.replace(/<[^>]+>/g, '')));
+
+    // Get sheet data
+    const rowMatches = str.match(/<row[^>]*>[\s\S]*?<\/row>/g) || [];
+    const rows = [];
+    rowMatches.forEach(rowStr => {
+      const cells = rowStr.match(/<c[^>]*>[\s\S]*?<\/c>/g) || [];
+      const rowData = cells.map(cell => {
+        const t = cell.match(/t="([^"]*)"/) ? cell.match(/t="([^"]*)"/)[1] : '';
+        const v = cell.match(/<v>([^<]*)<\/v>/) ? cell.match(/<v>([^<]*)<\/v>/)[1] : '';
+        if (t === 's') return sharedStrings[parseInt(v)] || '';
+        return v;
+      });
+      if (rowData.some(v => v)) rows.push(rowData);
+    });
+
+    if (rows.length < 2) return { rows: [], headers: [] };
+    const headers = rows[0];
+    const dataRows = rows.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+      return obj;
+    });
+    return { rows: dataRows, headers };
+  } catch(e) {
+    return { rows: [], headers: [] };
   }
+}
 
-  function setFilter(f) {
-    curFilter = f;
-    updateFilterBtns();
-    renderTable(mismatches);
+// ── Analysis ──────────────────────────────────────────────────
+function findKeyField(headers) {
+  const candidates = ['passenger_id','passengerid','id','pax_id','paxid','ticket_no','ticket_number','booking_ref','booking_reference','record_no','recordno'];
+  const lower = headers.map(h => h.toLowerCase().replace(/[\s_-]/g,''));
+  for (const c of candidates) {
+    const idx = lower.indexOf(c);
+    if (idx >= 0) return headers[idx];
   }
+  // Fallback: first column
+  return headers[0];
+}
 
-  function updateFilterBtns() {
-    document.getElementById('fb-all').classList.toggle('on', curFilter === 'all');
-    document.getElementById('fb-ma').classList.toggle('on', curFilter === 'missing_a');
-    document.getElementById('fb-mb').classList.toggle('on', curFilter === 'missing_b');
+function normalize(val) {
+  if (val == null) return '';
+  return String(val).trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+function runAnalysis() {
+  if (!dataA.length || !dataB.length) return;
+
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = '▸ Analyzing...';
+
+  setTimeout(() => {
+    try {
+      const allHeaders = [...new Set([...headersA, ...headersB])];
+      const keyA = findKeyField(headersA);
+      const keyB = findKeyField(headersB);
+
+      // Build maps
+      const mapA = {}, mapB = {};
+      dataA.forEach(r => { const k = normalize(r[keyA]); mapA[k] = r; });
+      dataB.forEach(r => { const k = normalize(r[keyB]); mapB[k] = r; });
+
+      const allKeys = new Set([...Object.keys(mapA), ...Object.keys(mapB)]);
+
+      const mismatches = [], onlyA = [], onlyB = [], matches = [];
+
+      allKeys.forEach(k => {
+        const rA = mapA[k], rB = mapB[k];
+        if (rA && !rB) { onlyA.push({ key: k, row: rA, source: 'A' }); }
+        else if (!rA && rB) { onlyB.push({ key: k, row: rB, source: 'B' }); }
+        else {
+          // Both exist — compare fields
+          const diffs = [];
+          allHeaders.forEach(h => {
+            const va = normalize(rA[h] || rA[Object.keys(rA).find(k2 => k2.toLowerCase() === h.toLowerCase())] || '');
+            const vb = normalize(rB[h] || rB[Object.keys(rB).find(k2 => k2.toLowerCase() === h.toLowerCase())] || '');
+            if (va !== vb) diffs.push({ field: h, valueA: rA[h] || '', valueB: rB[h] || '' });
+          });
+          if (diffs.length) mismatches.push({ key: k, rowA: rA, rowB: rB, diffs });
+          else matches.push({ key: k, rowA: rA });
+        }
+      });
+
+      analysisResults = { mismatches, onlyA, onlyB, matches, allHeaders, keyA, keyB };
+      renderResults(analysisResults);
+    } catch(err) {
+      showError(`Analysis error: ${err.message}`);
+    }
+
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = '▸ Run Analysis';
+  }, 100);
+}
+
+function findField(row, field) {
+  if (row[field] !== undefined) return row[field];
+  const lf = field.toLowerCase();
+  const key = Object.keys(row).find(k => k.toLowerCase() === lf);
+  return key ? row[key] : '';
+}
+
+function getSurname(row) {
+  const candidates = ['surname','last_name','lastname','family_name','lname'];
+  for (const c of candidates) {
+    const val = findField(row, c);
+    if (val) return val;
   }
+  return findField(row, Object.keys(row)[1] || '') || '—';
+}
 
-  function filterRows(q) {
-    curSearch = q;
-    renderTable(mismatches);
+function getFirstName(row) {
+  const candidates = ['first_name','firstname','given_name','fname','forename'];
+  for (const c of candidates) {
+    const val = findField(row, c);
+    if (val) return val;
   }
+  return findField(row, Object.keys(row)[2] || '') || '—';
+}
 
-  function downloadCSV() {
-    if (!mismatches.length) return;
-    const headers = ['Status', 'Source', ...DISPLAY_FIELDS.map(f => FIELD_LABELS[f]), 'Note'];
-    const rows = applyFilters(mismatches).map(r => [
-      r._type === 'missing_a' ? 'Missing in A' : 'Missing in B',
-      r._type === 'missing_a' ? 'B' : 'A',
-      ...DISPLAY_FIELDS.map(f => r[f] || ''),
-      r._note || ''
-    ]);
-
-    const csv = [headers, ...rows].map(row => row.map(c => '"' + (String(c).replace(/"/g, '""')) + '"').join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'passenger_mismatches.csv'; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+function getFlightNo(row) {
+  const candidates = ['flight_no','flight_number','flightno','flight','flt_no','flt'];
+  for (const c of candidates) {
+    const val = findField(row, c);
+    if (val) return val;
   }
+  return '—';
+}
+
+function renderResults(r) {
+  const totalUnique = r.mismatches.length + r.onlyA.length + r.onlyB.length + r.matches.length;
+  const issues = r.mismatches.length + r.onlyA.length + r.onlyB.length;
+  document.getElementById('stat-total').textContent = totalUnique;
+  document.getElementById('stat-mismatch').textContent = r.mismatches.length;
+  document.getElementById('stat-only').textContent = r.onlyA.length + r.onlyB.length;
+  document.getElementById('stat-match').textContent = r.matches.length;
+  document.getElementById('result-count-badge').textContent = `${issues} issue${issues !== 1 ? 's' : ''}`;
+
+  // Mismatches
+  const tbm = document.getElementById('tbody-mismatches');
+  tbm.innerHTML = r.mismatches.length ? r.mismatches.map(m => `
+    <tr>
+      <td><span class="status-pill pill-mismatch"><span class="dot dot-mismatch"></span>MISMATCH</span></td>
+      <td>${escHtml(m.key)}</td>
+      <td>${escHtml(getSurname(m.rowA))}</td>
+      <td>${escHtml(getFirstName(m.rowA))}</td>
+      <td>${escHtml(getFlightNo(m.rowA))}</td>
+      <td class="diff-cell">
+        ${m.diffs.slice(0,3).map(d => `
+          <span class="val-a"><span class="val-label">${escHtml(d.field)} A:</span>${escHtml(String(d.valueA || '—'))}</span>
+          <span class="val-b"><span class="val-label">${escHtml(d.field)} B:</span>${escHtml(String(d.valueB || '—'))}</span>
+        `).join('')}
+        ${m.diffs.length > 3 ? `<span class="field-diff-badge">+${m.diffs.length - 3} more</span>` : ''}
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="empty-state">✓ No field mismatches found</td></tr>';
+
+  // Only A
+  renderSimpleTab('only-a', r.onlyA.map(x => x.row), r.allHeaders, 'pill-only-a dot-only-a ONLY IN A');
+
+  // Only B
+  renderSimpleTab('only-b', r.onlyB.map(x => x.row), r.allHeaders, 'pill-only-b dot-only-b ONLY IN B');
+
+  // Matches
+  renderSimpleTab('matches', r.matches.map(x => x.rowA), r.allHeaders.slice(0, 6), null, true);
+
+  document.getElementById('results').classList.add('visible');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderSimpleTab(tabId, rows, headers, pillClass, isMatch) {
+  const displayHeaders = headers.slice(0, 8);
+  const thead = document.getElementById(`thead-${tabId}-row`);
+  thead.innerHTML = (isMatch ? '' : '<th>Status</th>') + displayHeaders.map(h => `<th>${escHtml(h)}</th>`).join('');
+
+  const tbody = document.getElementById(`tbody-${tabId}`);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="${displayHeaders.length + 1}" class="empty-state">No records in this category</td></tr>`;
+    return;
+  }
+  const [pillCls, dotCls, label] = pillClass ? pillClass.split(' ') : ['','',''];
+  tbody.innerHTML = rows.map(row => `
+    <tr>
+      ${!isMatch ? `<td><span class="status-pill ${pillCls}"><span class="dot ${dotCls}"></span>${label}</span></td>` : ''}
+      ${displayHeaders.map(h => `<td>${escHtml(String(row[h] != null ? row[h] : ''))}</td>`).join('')}
+    </tr>
+  `).join('');
+}
+
+// ── Download CSV ───────────────────────────────────────────────
+function downloadCSV() {
+  if (!analysisResults) return;
+  const { mismatches, onlyA, onlyB, matches, allHeaders } = analysisResults;
+
+  const rows = [];
+  const hdrs = ['STATUS', 'RECORD_KEY', ...allHeaders, 'DIFFERENCES'];
+  rows.push(hdrs);
+
+  mismatches.forEach(m => {
+    rows.push(['MISMATCH', m.key, ...allHeaders.map(h => findField(m.rowA, h)), m.diffs.map(d => `${d.field}: "${d.valueA}"→"${d.valueB}"`).join(' | ')]);
+  });
+  onlyA.forEach(x => {
+    rows.push(['ONLY_IN_A', x.key, ...allHeaders.map(h => findField(x.row, h)), '']);
+  });
+  onlyB.forEach(x => {
+    rows.push(['ONLY_IN_B', x.key, ...allHeaders.map(h => findField(x.row, h)), '']);
+  });
+  matches.forEach(m => {
+    rows.push(['MATCH', m.key, ...allHeaders.map(h => findField(m.rowA, h)), '']);
+  });
+
+  const csv = rows.map(r => r.map(cell => `"${String(cell || '').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `FlightSync_Report_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.classList.toggle('visible', !!msg);
+}
 </script>
+
+</body>
+</html>
+    
+  
